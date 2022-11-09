@@ -116,19 +116,91 @@ def one_vs_all(X, y, num_labels, learning_rate):
     # 标签是从1开始的，而非从0开始的
     for i in range(1, num_labels + 1):
         theta = np.zeros(params + 1)
+        # 将y从类标签转换为每个分类器的二进制值（要么是类i，要么不是类i）
         y_i = np.array([1 if label == i else 0 for label in y])
         y_i = np.reshape(y_i, (rows, 1))
 
         # minimize the objective function
+        # 适用 minimize 函数优化梯度下降
         fmin = minimize(fun=costReg, x0=theta, args=(X, y_i, learning_rate), method='TNC', jac=gradient)
         all_theta[i - 1, :] = fmin.x
 
     return all_theta
+
+
+# 我们现在准备好最后一步 - 使用训练完毕的分类器预测每个图像的标签。
+# 对于这一步，我们将计算每个类的类概率，对于每个训练样本（使用当然的向量化代码），并将输出类标签为具有最高概率的类。
+def predict_all(X, all_theta):
+    rows = X.shape[0]
+    params = X.shape[1]
+    num_labels = all_theta.shape[0]
+
+    # same as before, insert ones to match the shape
+    X = np.insert(X, 0, values=np.ones(rows), axis=1)
+
+    # convert to matrices
+    X = np.matrix(X)
+    all_theta = np.matrix(all_theta)
+
+    # compute the class probability for each class on each training instance
+    h = sigmoid(X * all_theta.T)
+
+    # create array of the index with the maximum probability
+    # np.argmax()函数取出h中元素最大值所对应的索引
+    h_argmax = np.argmax(h, axis=1)
+
+    # because our array was zero-indexed we need to add one for the true label prediction
+    h_argmax = h_argmax + 1
+
+    return h_argmax
+
+
 # ================================== 数据处理 ==================================
 # 导入mat数据
 dataFile = 'ex3data1.mat'
 data = loadmat(dataFile)
+# 手写数字，像素数字
+# print(data)
+# X 为输入数据(5000,400)，y 为输出类别(5000,1)，共 5000 组数据
+# print(data['X'].shape)
+# print(data['y'].shape)
+
 weightsFile = 'ex3weights.mat'
 weightInit = loadmat(weightsFile)
+# 初始化的权重参数
+# print(weightInit)
 
+# 实现思路
+# 首先，我们为theta添加了一个额外的参数（与训练数据一列），以计算截距项（常数项）。
+# 其次，我们将y从类标签转换为每个分类器的二进制值（要么是类i，要么不是类i）。
+# 最后，我们使用SciPy的较新优化API来最小化每个分类器的代价函数。
+# 如果指定的话，API将采用目标函数，初始参数集，优化方法和jacobian（渐变）函数。 然后将优化程序找到的参数分配给参数数组。
+# 实现向量化代码的一个更具挑战性的部分是正确地写入所有的矩阵，保证维度正确。
 
+# rows = 5000 ，有 5000 组手写数字数据
+rows = data['X'].shape[0]
+# print(rows)
+
+# params = 400 ， 每组手写数字有 400 个像素点数据
+params = data['X'].shape[1]
+# print(params)
+
+# 10个类别，对应10个分类器，所以参数共有 10x401 个
+all_theta = np.zeros((10, params + 1))
+# 为theta添加了一个额外的参数（与训练数据一列），以计算截距项（常数项）
+X = np.insert(data['X'], 0, values=np.ones(rows), axis=1)
+theta = np.zeros(params + 1)
+
+# 将y从类标签转换为每个分类器的二进制值（要么是类i，要么不是类i）
+# y_0 表示 若类标签为 0，则其值为 1
+y_0 = np.array([1 if label == 0 else 0 for label in data['y']])
+y_0 = np.reshape(y_0, (rows, 1))
+
+all_theta = one_vs_all(data['X'], data['y'], 10, 1)
+y_pred = predict_all(data['X'], all_theta)
+
+# 计算准确率
+# zip () 函数用于将可迭代的对象作为参数，将对象中对应的元素打包成一个个元组，然后返回由这些元组组成的列表。
+correct = [1 if a == b else 0 for (a, b) in zip(y_pred, data['y'])]
+accuracy = (sum(map(int, correct)) / float(len(correct)))
+print('accuracy = {0}%'.format(accuracy * 100))
